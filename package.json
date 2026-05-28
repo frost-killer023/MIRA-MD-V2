@@ -1,14 +1,17 @@
 {
-  "name": "mira-bot",
+  "name": "mira-md-v2",
   "version": "1.0.0",
-  "description": "Mon bot WhatsApp",
+  "description": "Bot WhatsApp Mira-MD-V2",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.0",
-    "pino": "^8.0.0"
+    "pino": "^8.0.0",
+    "pino-pretty": "^10.0.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
   }
 }
-
