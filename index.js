@@ -1,4 +1,4 @@
-const { default: makeWASocket, useMultiFileAuthState } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 
 async function startBot() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
@@ -8,43 +8,40 @@ async function startBot() {
         printQRInTerminal: false,
     });
 
-    // Gestion du pairing code
-    if (!sock.authState.creds.registered) {
-        const phoneNumber = "25766486303"; // Remplace bien par ton numéro ici
-        
-        console.log("Attente de connexion...");
-        setTimeout(async () => {
-            try {
-                const code = await sock.requestPairingCode(phoneNumber);
-                console.log("-----------------------------------------");
-                console.log("TON CODE D'ASSOCIATION EST : " + code);
-                console.log("-----------------------------------------");
-            } catch (err) {
-                console.error("Erreur lors de la génération du code :", err);
+    // 1. Notification de connexion réussie
+    sock.ev.on('connection.update', async (update) => {
+        const { connection, lastDisconnect } = update;
+        if (connection === 'open') {
+            console.log("Connexion établie avec succès !");
+            // Remplace par ton numéro complet pour recevoir le message
+            await sock.sendMessage(sock.user.id, { text: "✅ Mira-MD-V2 connecté avec succès !" });
+        } else if (connection === 'close') {
+            if (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut) {
+                startBot(); // Reconnexion automatique si déconnecté
             }
+        }
+    });
+
+    if (!sock.authState.creds.registered) {
+        const phoneNumber = "25766486303"; // Ton numéro ici
+        setTimeout(async () => {
+            const code = await sock.requestPairingCode(phoneNumber);
+            console.log("-----------------------------------------");
+            console.log("NOUVEAU CODE : " + code);
+            console.log("-----------------------------------------");
         }, 3000);
     }
 
     sock.ev.on('creds.update', saveCreds);
     
-    // Gestion des messages et commandes
     sock.ev.on('messages.upsert', async m => {
         const msg = m.messages[0];
         if (!msg.message || msg.key.fromMe) return;
 
-        // Récupération sécurisée du texte
         const messageContent = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
         
-        console.log("Nouveau message reçu :", messageContent);
-
-        // Système de commandes
-        if (messageContent.startsWith(".")) {
-            const args = messageContent.slice(1).trim().split(/ +/);
-            const command = args.shift().toLowerCase();
-
-            if (command === "ping") {
-                await sock.sendMessage(msg.key.remoteJid, { text: "Pong! 🏓" });
-            }
+        if (messageContent === ".ping") {
+            await sock.sendMessage(msg.key.remoteJid, { text: "Pong! 🏓" });
         }
     });
 }
