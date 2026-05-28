@@ -1,48 +1,70 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { 
+    default: makeWASocket, 
+    useMultiFileAuthState, 
+    DisconnectReason, 
+    makeCacheableSignalKeyStore 
+} = require('@whiskeysockets/baileys');
+const pino = require('pino');
 
 async function startBot() {
+    const logger = pino({ level: 'silent' });
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
     
     const sock = makeWASocket({
-        auth: state,
+        logger: logger,
+        auth: {
+            creds: state.creds,
+            keys: makeCacheableSignalKeyStore(state.keys, logger),
+        },
         printQRInTerminal: false,
+        browser: ["Mira-MD-V2", "Chrome", "1.0.0"],
+        connectTimeoutMs: 60000,
+        defaultQueryTimeoutMs: 60000,
+        keepAliveIntervalMs: 10000,
+        emitOwnEvents: true
     });
 
-    // 1. Notification de connexion réussie
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect } = update;
-        if (connection === 'open') {
-            console.log("Connexion établie avec succès !");
-            // Remplace par ton numéro complet pour recevoir le message
-            await sock.sendMessage(sock.user.id, { text: "✅ Mira-MD-V2 connecté avec succès !" });
-        } else if (connection === 'close') {
-            if (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut) {
-                startBot(); // Reconnexion automatique si déconnecté
+        
+        if (connection === 'close') {
+            const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
+            if (shouldReconnect) {
+                console.log("Reconnexion en cours...");
+                startBot();
             }
+        } else if (connection === 'open') {
+            console.log("✅ Mira-MD-V2 connecté !");
+            await sock.sendMessage(sock.user.id, { text: "✅ Mira-MD-V2 connecté avec succès !" });
         }
     });
 
     if (!sock.authState.creds.registered) {
-        const phoneNumber = "25766486303"; // Ton numéro ici
+        const phoneNumber = "257XXXXXXXX"; // <--- MET TON NUMÉRO ICI
         setTimeout(async () => {
-            const code = await sock.requestPairingCode(phoneNumber);
-            console.log("-----------------------------------------");
-            console.log("NOUVEAU CODE : " + code);
-            console.log("-----------------------------------------");
-        }, 3000);
+            try {
+                const code = await sock.requestPairingCode(phoneNumber);
+                console.log("-----------------------------------------");
+                console.log("TON CODE D'ASSOCIATION : " + code);
+                console.log("-----------------------------------------");
+            } catch (err) {
+                console.error("Erreur Pairing Code :", err);
+            }
+        }, 5000);
     }
 
     sock.ev.on('creds.update', saveCreds);
     
     sock.ev.on('messages.upsert', async m => {
-        const msg = m.messages[0];
-        if (!msg.message || msg.key.fromMe) return;
-
-        const messageContent = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
-        
-        if (messageContent === ".ping") {
-            await sock.sendMessage(msg.key.remoteJid, { text: "Pong! 🏓" });
-        }
+        try {
+            const msg = m.messages[0];
+            if (!msg.message || msg.key.fromMe) return;
+            const text = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
+            
+            if (text === ".ping") {
+                await sock.sendMessage(msg.key.remoteJid, { text: "Pong! 🏓" });
+            }
+        } catch (err) { console.log(err); }
     });
 }
 
